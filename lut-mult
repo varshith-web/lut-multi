@@ -1,0 +1,168 @@
+// multiplier_lut.v
+module multiplier_lut (
+    input wire [1:0] A,
+    input wire [1:0] B,
+    output reg [3:0] lut_out
+);
+
+    always_comb begin
+        case ({A, B})
+            4'b0000: lut_out = 4'd0;   // 0 * 0 = 0
+            4'b0001: lut_out = 4'd0;   // 0 * 1 = 0
+            4'b0010: lut_out = 4'd0;   // 0 * 2 = 0
+            4'b0011: lut_out = 4'd0;   // 0 * 3 = 0
+
+            4'b0100: lut_out = 4'd0;   // 1 * 0 = 0
+            4'b0101: lut_out = 4'd1;   // 1 * 1 = 1
+            4'b0110: lut_out = 4'd2;   // 1 * 2 = 2
+            4'b0111: lut_out = 4'd3;   // 1 * 3 = 3
+
+            4'b1000: lut_out = 4'd0;   // 2 * 0 = 0
+            4'b1001: lut_out = 4'd2;   // 2 * 1 = 2
+            4'b1010: lut_out = 4'd4;   // 2 * 2 = 4
+            4'b1011: lut_out = 4'd6;   // 2 * 3 = 6
+
+            4'b1100: lut_out = 4'd0;   // 3 * 0 = 0
+            4'b1101: lut_out = 4'd3;   // 3 * 1 = 3
+            4'b1110: lut_out = 4'd6;   // 3 * 2 = 6
+            4'b1111: lut_out = 4'd9;   // 3 * 3 = 9
+
+            default: lut_out = 4'd0;
+        endcase
+    end
+
+endmodule
+
+// top_matrix_multiplier.v
+module top_matrix_multiplier (
+    input wire [1:0] A [1:0] [1:0], // Input matrix A (2x2, 2-bit elements)
+    input wire [1:0] B [1:0] [1:0], // Input matrix B (2x2, 2-bit elements)
+    output wire [4:0] C [1:0] [1:0]  // Output matrix C (2x2)
+);
+
+    // Internal signals for the partial products
+    wire [3:0] partial_sum_00, partial_sum_01, partial_sum_10, partial_sum_11;
+    wire [3:0] partial_sum_02, partial_sum_03, partial_sum_12, partial_sum_13;
+
+    // LUTs for calculating partial products
+    multiplier_lut lut_00 (
+        .A(A[0][0]),
+        .B(B[0][0]),
+        .lut_out(partial_sum_00)
+    );
+
+    multiplier_lut lut_01 (
+        .A(A[0][1]),
+        .B(B[1][0]),
+        .lut_out(partial_sum_01)
+    );
+
+    multiplier_lut lut_02 (
+        .A(A[0][0]),
+        .B(B[0][1]),
+        .lut_out(partial_sum_02)
+    );
+
+    multiplier_lut lut_03 (
+        .A(A[0][1]),
+        .B(B[1][1]),
+        .lut_out(partial_sum_03)
+    );
+
+    multiplier_lut lut_10 (
+        .A(A[1][0]),
+        .B(B[0][0]),
+        .lut_out(partial_sum_10)
+    );
+
+    multiplier_lut lut_11 (
+        .A(A[1][1]),
+        .B(B[1][0]),
+        .lut_out(partial_sum_11)
+    );
+
+    multiplier_lut lut_12 (
+        .A(A[1][0]),
+        .B(B[0][1]),
+        .lut_out(partial_sum_12)
+    );
+
+    multiplier_lut lut_13 (
+        .A(A[1][1]),
+        .B(B[1][1]),
+        .lut_out(partial_sum_13)
+    );
+
+    // Compute the matrix C by accumulating the results from LUTs
+    wire [4:0] C_temp [1:0] [1:0];
+    assign C_temp[0][0] = partial_sum_00 + partial_sum_01;
+    assign C_temp[0][1] = partial_sum_02 + partial_sum_03;
+    assign C_temp[1][0] = partial_sum_10 + partial_sum_11;
+    assign C_temp[1][1] = partial_sum_12 + partial_sum_13;
+
+    assign C[0][0] = C_temp[0][0];
+    assign C[0][1] = C_temp[0][1];
+    assign C[1][0] = C_temp[1][0];
+    assign C[1][1] = C_temp[1][1];
+
+endmodule
+
+// tb_top_matrix_multiplier.v
+`timescale 1ns / 1ps
+
+module tb_top_matrix_multiplier;
+
+    // Parameters
+    parameter DATA_WIDTH = 2;
+    parameter MATRIX_SIZE = 2;
+    parameter RESULT_WIDTH = 5;
+
+    // Inputs to the DUT
+    reg [DATA_WIDTH-1:0] tb_A [MATRIX_SIZE-1:0] [MATRIX_SIZE-1:0];
+    reg [DATA_WIDTH-1:0] tb_B [MATRIX_SIZE-1:0] [MATRIX_SIZE-1:0];
+
+    // Outputs from the DUT
+    wire [RESULT_WIDTH-1:0] tb_C [MATRIX_SIZE-1:0] [MATRIX_SIZE-1:0];
+
+    integer i; // Loop counter
+
+    // Instantiate the Design Under Test (DUT)
+    top_matrix_multiplier dut (
+        .A(tb_A),
+        .B(tb_B),
+        .C(tb_C)
+    );
+
+    initial begin
+        // Initialize inputs
+        tb_A[0][0] = 2'b01;
+        tb_A[0][1] = 2'b10;
+        tb_A[1][0] = 2'b00;
+        tb_A[1][1] = 2'b11;
+
+        tb_B[0][0] = 2'b11;
+        tb_B[0][1] = 2'b01;
+        tb_B[1][0] = 2'b10;
+        tb_B[1][1] = 2'b00;
+
+        #10;
+        $display("Test Case 1:");
+        $display("A = [%d %d; %d %d]", {tb_A[0][1], tb_A[0][0]}, {tb_A[0][1], tb_A[0][0]}, {tb_A[1][1], tb_A[1][0]}, {tb_A[1][1], tb_A[1][0]});
+        $display("B = [%d %d; %d %d]", {tb_B[0][1], tb_B[0][0]}, {tb_B[0][1], tb_B[0][0]}, {tb_B[1][1], tb_B[1][0]}, {tb_B[1][1], tb_B[1][0]});
+        $display("C = [%d %d; %d %d]", tb_C[0][0], tb_C[0][1], tb_C[1][0], tb_C[1][1]);
+        // Expected C:
+        // C[0][0] = (1 * 3) + (2 * 2) = 3 + 4 = 7 (5'b00111)
+        // C[0][1] = (1 * 1) + (2 * 0) = 1 + 0 = 1 (5'b00001)
+        // C[1][0] = (0 * 3) + (3 * 2) = 0 + 6 = 6 (5'b00110)
+        // C[1][1] = (0 * 1) + (3 * 0) = 0 + 0 = 0 (5'b00000)
+        if (tb_C[0][0] == 5'b00111 && tb_C[0][1] == 5'b00001 && tb_C[1][0] == 5'b00110 && tb_C[1][1] == 5'b00000) begin
+            $display("Test Case 1 PASSED");
+        end else begin
+            $display("Test Case 1 FAILED");
+        end
+        #10;
+
+        $finish;
+    end
+
+endmodule
